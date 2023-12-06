@@ -69,6 +69,25 @@ object LazyEvaluation extends App {
   println(lt30)  // Prints all the side effects of both greaterThan20 and lessThan30 for all the element
   // First applies greaterThan20 on all elements and then applies lessThan30 on the result List
 
+  // withFilter uses lazy evaluation
+  val gt20WithFilter = aList.withFilter(greaterThan20)
+  val lt30WithFilter = aList.withFilter(lessThan30)
+
+  println(lt30WithFilter)  // Doesn't print the list elements as it's based on lazy evaluation. prints: scala.collection.IterableOps$WithFilter@1efee8e7
+  lt30WithFilter.foreach(println) // Evaluates the filters now
+  // For each element first checks greaterThan20 then if true checks lessThan30 and then prints in output
+
+  // For - comprehension uses withFilter in the if guards
+  println(for {
+    x <- aList if greaterThan20(x)
+  } yield x * 2)
+  // is same as
+  println(aList.withFilter(greaterThan20).map(_ * 2))
+
+  /*
+    Exercise: Implement a lazy evaluated, singly linked STREAM of elements
+  */
+  // Check com.learning.exercise.SinglyLinkedStream
 
 
 
