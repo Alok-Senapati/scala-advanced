@@ -1,10 +1,34 @@
 package com.learning.concurrency
 
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Random, Success, Failure}
+import scala.util.{Failure, Random, Success}
+import scala.concurrent.duration.Duration
 
 object FuturesAndPromises extends App {
+  /*
+    The Future and Promise are two high-level asynchronous constructs in concurrent programming.
+
+    1. Futures -
+      - The Future is a read-only placeholder for the result of ongoing computation.
+      - It acts as a proxy for an actual value that does not yet exist.
+      - Think of IO-Bound or CPU-Bound operations, which take a notable time to complete.
+      - To create asynchronous computation, we can put our computation inside the apply function of the Future:
+      - To run the future, we need an ExecutionContext, which allows us to separate our business logic (the code) from the execution environment.
+      - Because the ExecutionContext is an implicit parameter, we can import or create an ExecutionContext and mark it as implicit in our scope.
+      - Future has two stages:
+        - Not Completed: The computation is not completed yet.
+        - Completed: The computation is completed, leaving the result in one of two states. If the computation results in a value,
+          it’s considered a success, and if it results in an exception, it’s considered a failure. Until the result of the ongoing
+          computation is ready, the state of the Future is not completed (datatype - Option, value - None), and after that, the Future
+          is in either the success or failure state.
+      - We can get the value of the future using
+          - Using the onComplete callback
+          - Blocking the Future by using Await.result() or Await.ready() (Non Recommended)
+      - The Future has the onComplete() method. It gets the f: Try[T] => U as a callback, which let us decide what to do in each state
+        of the completion stage
+   */
+
   // Scala Futures provides a Functional way to compute something on parallel or on another thread
   def getIntAfterSleep(): Int = {
     Thread.sleep(2000)
@@ -111,5 +135,6 @@ object FuturesAndPromises extends App {
   getProfileNoMaterWhat.foreach(println)
   fetchProfileNoMaterWhat.foreach(println)
   fallBack.foreach(println)
-  Thread.sleep(10000)  // To make the main thread wait till the Future computation completes
+  println(Await.result(maryProfile, Duration.Inf))  // Blocks the thread till the Future execution is complete
+  // Thread.sleep(10000)  // To make the main thread wait till the Future computation completes
 }
