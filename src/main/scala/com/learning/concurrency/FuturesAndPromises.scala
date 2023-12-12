@@ -1,9 +1,10 @@
 package com.learning.concurrency
 
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, Future, Promise}
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Failure, Random, Success}
+import scala.util.{Failure, Random, Success, Try}
 import scala.concurrent.duration.Duration
+import scala.concurrent.duration.*
 
 object FuturesAndPromises extends App {
   /*
@@ -27,6 +28,12 @@ object FuturesAndPromises extends App {
           - Blocking the Future by using Await.result() or Await.ready() (Non Recommended)
       - The Future has the onComplete() method. It gets the f: Try[T] => U as a callback, which let us decide what to do in each state
         of the completion stage
+
+    2. Promises -
+      - While futures are defined as a type of read-only placeholder object created for a result which doesn’t yet exist,
+        a promise can be thought of as a writeable, single-assignment container, which completes a future.
+      - That is, a promise can be used to successfully complete a future with a value (by “completing” the promise) using the success method.
+      - Conversely, a promise can also be used to complete a future with an exception, by failing the promise, using the failure method.
    */
 
   // Scala Futures provides a Functional way to compute something on parallel or on another thread
@@ -121,6 +128,15 @@ object FuturesAndPromises extends App {
     mary <- SocialNetwork.fetchBestFriend(jack)
   } jack poke mary
 
+  println("For Filter")
+  (for {
+    profile <- SocialNetwork.fetchProfile("fb.id.2.bill")
+    bestFriend <- SocialNetwork.fetchBestFriend(profile) if bestFriend.name.startsWith("h")
+  } yield bestFriend.name).onComplete(x => x match {
+    case Success(value) => println(value)
+    case Failure(e) => e.printStackTrace()
+  })
+
   // Fallbacks
   val getProfileNoMaterWhat = SocialNetwork.fetchProfile("unknown").recover {  // Recover takes a partial function which returns a Profile
     case e: Throwable => Profile("fb.id.5.dummy", "Dummy")
@@ -135,6 +151,168 @@ object FuturesAndPromises extends App {
   getProfileNoMaterWhat.foreach(println)
   fetchProfileNoMaterWhat.foreach(println)
   fallBack.foreach(println)
-  println(Await.result(maryProfile, Duration.Inf))  // Blocks the thread till the Future execution is complete
-  // Thread.sleep(10000)  // To make the main thread wait till the Future computation completes
+
+
+
+  /*
+  * Blocking Futures -
+    - Why? Sometimes we need to block Future for some critical applications such as Bank Transfer/Transactional Operations
+    - Await.result and Await.ready can be used for blocking a Future
+  * */
+
+  case class User(name: String)
+  case class Transction(userName: String, merchantName: String, amount: Double, status: String)
+
+  object BankingApp {
+    def fetchUser(name: String): Future[User] = Future {
+      // Some DB Operations
+      Thread.sleep(1000)
+      User(name)
+    }
+
+    def createTransaction(user: User, merchantName: String, amount: Double): Future[Transction] = Future {
+      // Some Validation Logic
+      Thread.sleep(1000)
+      Transction(userName = user.name, merchantName = merchantName, amount = amount, status = "SUCCESS")
+    }
+
+    def purchaseItem(username: String, merchantName: String, item: String, cost: Double): String = {
+      // Fetch User from DB
+      // create the transaction
+      // wait till the transaction is finished
+      val transactionFuture = for {
+        user <- fetchUser(username)
+        txn <- createTransaction(user, merchantName, cost)
+      } yield txn.status
+//      Await.result(transactionFuture, 2.seconds)  // Blocks the thread Waits till the Future is complete and returns the value
+      val transactionReady = Await.ready(transactionFuture, 2.seconds)  // Blocks the thread Waits till the Future is complete and returns a completed Futore of same type
+      transactionReady.value.map(t => t match {
+        case Success(value) => value
+        case Failure(e) => "FAILED"
+      }).get
+    }
+  }
+
+  println(BankingApp.purchaseItem("Alok", "someMerchant", "IPhone 15", 10000))
+
+
+  // Promises
+  val aPromise = Promise[Int]
+
+  val fut1 = Future {   // Will result in a Failure as the promise is already completed by fut2
+    Thread.sleep(5000)
+    aPromise success 1
+  }
+
+  val fut2 = Future {
+    Thread.sleep(1000)
+    aPromise success 2
+  }
+
+  fut1.onComplete(t => t match {
+    case Success(value) => println(s"fut1 -> $value")
+    case Failure(e) => println(s"fut1 -> $e")
+  })
+  fut2.onComplete(t => t match {
+    case Success(value) => println(s"fut2 -> $value")
+    case Failure(e) => println(s"fut2 -> $e")
+  })
+
+  aPromise.future.onComplete(x => println(s"Future of aPromise holds value $x post computation"))
+  Thread.sleep(10000)
+
+
+  // Producer Consumer using Promises
+  val prodConsPromise = Promise[Int]()  // Promise of type Int
+  val futureOfPromise = prodConsPromise.future  // Future wrapped inside a Promise
+  val producerFuture = Future {
+    try {
+      val value = Random.nextInt(200)
+      Thread.sleep(1000)
+      prodConsPromise success value  // Completes the future with success and value
+    } catch {
+      case e: Exception => prodConsPromise failure e  // Completes the future with exception
+    }
+  }
+
+  val consumerFuture = Future {
+    Thread.sleep(200)
+    futureOfPromise onComplete (t => t match {
+      case Success(value) => println(s"Consumed value $value from producer")
+    })
+  }
+
+  Thread.sleep(2000)
+
+
+  /*
+    Exercises -
+      1) fulfill a future IMMEDIATELY with a value
+      2) inSequence(fa, fb) -> Return the future b after it made sure that future a is successful
+      3) first(fa, fb) => new future with the first value of the two futures
+      4) last(fa, fb) => new future with the last value
+      5) retryUntil[T](action: () => Future[T], condition: T => Boolean): Future[T]
+  */
+
+  // Solutions
+  def futureImmediately[T](value: T): Future[T] = Future(value)
+  def inSequence[A, B](fa: Future[A], fb: Future[B]): Future[B] = {
+    fa.flatMap(_ => fb)
+  }
+  def first[A](fa: Future[A], fb: Future[A]): Future[A] = {
+    val promise = Promise[A]
+    // tryComplete -> tries to complete the promise with either a value or the exception.
+    // Whichever future completes first the promise will have value for that particular future and the later will be ignored
+    // as success and future to a promise can only be published once
+    fa.onComplete(promise.tryComplete)
+    fb.onComplete(promise.tryComplete)
+    promise.future
+  }
+  def last[A](fa: Future[A], fb: Future[A]): Future[A] = {
+    val bothPromise = Promise[A]
+    val lastPromise = Promise[A]
+    def checkAndComplete(result: Try[A]) = {
+      if !bothPromise.tryComplete(result) then lastPromise.tryComplete(result)
+      else bothPromise.tryComplete(result)
+    }
+    fa.onComplete(checkAndComplete)
+    fb.onComplete(checkAndComplete)
+    lastPromise.future
+  }
+  def retryUntil[T](action: () => Future[T], condition: T => Boolean): Future[T] = {
+    action().filter(condition).recoverWith {
+      case _ => retryUntil(action, condition)
+    }
+  }
+
+  val fa = Future {
+    Thread.sleep(2000)
+    println("Completing fa")
+    49
+  }
+
+  val fb = Future {
+    Thread.sleep(500)
+    println("Completing fb")
+    43
+  }
+
+
+  futureImmediately(10).foreach(println)
+  inSequence(fa, fb).foreach(println)
+  first(fa, fb).foreach(x => println(s"FIRST -> $x"))
+  last(fa, fb).foreach(x => println(s"LAST -> $x"))
+
+  val random = new Random()
+  val action = () => Future {
+    Thread.sleep(100)
+    val nextValue = random.nextInt(100)
+    println("generated " + nextValue)
+    nextValue
+  }
+
+  retryUntil(action, (x: Int) => x < 10).foreach(result => println("settled at " + result))
+
+  Thread.sleep(20000)
+
 }
