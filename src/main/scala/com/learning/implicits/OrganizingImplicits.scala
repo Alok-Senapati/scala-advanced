@@ -13,7 +13,7 @@ object OrganizingImplicits extends App {
     Implicits can be
       - var/val
       - object
-      - accessor methods (defs without parentheses)
+      - accessor methods (def without parentheses)
   */
 
   // Exercise - Custom Ordering for Person object
