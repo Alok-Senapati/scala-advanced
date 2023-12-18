@@ -8,14 +8,16 @@ object TypeClasses extends App {
       E.g. - Ordering
    */
   // Let's implement a HTMLWritable to perform server side rendering
-  trait HTMLWritable {
-    def toHTML: String
-  }
+//  trait HTMLWritable {
+//    def toHTML: String
+//  }
 
   // Let us assume we have a case class representing User
-  case class User(name: String, age: Int, email: String) extends HTMLWritable {
-    override def toHTML: String = s"<div>Name: $name, age: $age, email: <a href=$email /></div>"
-  }
+  case class User(name: String, age: Int, email: String)
+  //  extends HTMLWritable
+//  {
+//    override def toHTML: String = s"<div>Name: $name, age: $age, email: <a href=$email /></div>"
+//  }
 
   val john = User("John", 24, "john_jacob@gmail.com")
   println(john.toHTML)
@@ -71,8 +73,8 @@ object TypeClasses extends App {
   // In the above approach, HTMLSerializer is called a Type Class and UserSerializer, PartialUserSerializer and
   // IntSerializer are called Type Class Instances and often defined using singleton objects
 
-  println(HTMLSerializerPM.serializeToHTML(john))
-  println(HTMLSerializerPM.serializeToHTML(42))
+  println(HTMLSerializer.serialize(john))
+  println(HTMLSerializer.serialize(42))
 
   // Adding power of implicits with Type Classes
   object HTMLSerializer {
@@ -89,35 +91,52 @@ object TypeClasses extends App {
 
   // Using apply
   println(HTMLSerializer[User].serialize(john))
+
+  // Let's enhance HTMLSerializer with Implicit conversion classes
+
+  implicit class HTMLEnrich[T](value: T) {
+    // We can optionally make the serializer implicit to let compiler search for the required serializer in scope
+    def toHTML(implicit serializer: HTMLSerializer[T]): String = serializer.serialize(value)
+  }
+
+  println(76.toHTML(IntSerializer))
+  println(john.toHTML(UserSerializer))
+
+
+  println(76.toHTML)
+  println(john.toHTML)
+
+
   /*
-    Exercise - 1: Implement Equality type class and use implicits
+    Exercise - 1:
+    - Implement Equality type class and use implicits
+    - Improve the EQ Type class with Implicit class
+        - ===(another value: T)
+        - !==(another value: T)
    */
-  trait Equal[T] {
-    def apply(v1: T, v2: T): Boolean
-  }
+  // Check exercise package
 
-  // UserEquality based on Name
-  implicit object EqualUserName extends Equal[User] {
-    override def apply(v1: User, v2: User): Boolean = v1.name.equals(v2.name)
-  }
 
-  // UserEquality based on email
-  object EqualUserEmail extends Equal[User] {
-    override def apply(v1: User, v2: User): Boolean = v1.email.equals(v2.email)
-  }
+  // Context Bound
+  // Let's say we have below htmlBoilerPlate method
+  def htmlBoilerPlate[T](content: T)(implicit serializer: HTMLSerializer[T]): String =
+    s"<html><head></head><body>${content.toHTML(serializer)}</body></html>"
 
-  // IntEquality
-  implicit object IntegerEqual extends Equal[Int] {
-    override def apply(v1: Int, v2: Int): Boolean = v1 == v2
-  }
+  // The above method can be written with a more compact method signature
+  // The below signature is called as context bound which tells the compiler to add an implicit parameter to the method signature
+  // Equivalent to: def htmlSugar[T](content: T)(implicit serializer: HTMLSerializer[T]): String
+  // But here we cannot use other methods of serializer object, To do that we can use implicitly method to get the implicit serializer object
+  def htmlSugar[T: HTMLSerializer](content: T): String =
+    val serializer = implicitly[HTMLSerializer[T]]
+    s"<html><head></head><body>${content.toHTML(serializer)}</body></html>"
+  println(htmlSugar(john))
 
-  // Equality Implicit
-  object Equal {
-    def apply[T](a: T, b: T)(implicit equalizer: Equal[T]): Boolean = equalizer(a, b)
-  }
 
-  val anotherJohn = User("John", 43, "john_potter@gmail.com")
-  println(Equal(john, anotherJohn))  // Takes the implicit EqualUserName
-  println(Equal(42, 43))
+  // implicitly - Used to surface our the implicit value that will be used
+  case class Permissions(value: String)
+  implicit val defaultPermission: Permissions = Permissions("0744")
+
+  val impForPermissions = implicitly[Permissions]
+  println(impForPermissions)
 
 }
