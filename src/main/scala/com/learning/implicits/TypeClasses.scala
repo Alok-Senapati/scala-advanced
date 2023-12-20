@@ -73,8 +73,8 @@ object TypeClasses extends App {
   // In the above approach, HTMLSerializer is called a Type Class and UserSerializer, PartialUserSerializer and
   // IntSerializer are called Type Class Instances and often defined using singleton objects
 
-  println(HTMLSerializer.serialize(john))
-  println(HTMLSerializer.serialize(42))
+  println(PartialUserSerializer.serialize(john))
+  println(IntSerializer.serialize(42))
 
   // Adding power of implicits with Type Classes
   object HTMLSerializer {
