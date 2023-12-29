@@ -31,7 +31,8 @@ object TypeMembers extends App {
 
   val cat: ac.CatAnimal = new Cat
 
-  // We can define type members outside of a class also
+  // We can define type members outside of a class and trait also
+  // But they must be Type Aliases only
   type CatAlias = Cat
   val anotherCat: CatAlias = new Cat
 
