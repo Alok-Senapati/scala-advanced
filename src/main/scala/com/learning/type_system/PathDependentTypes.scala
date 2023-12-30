@@ -1,5 +1,8 @@
 package com.learning.type_system
 
+import java.nio.ByteBuffer
+import scala.collection.mutable
+
 object PathDependentTypes extends App {
   /*
     Inner Types -
@@ -71,34 +74,93 @@ object PathDependentTypes extends App {
   // oo.print(new o.InnerClass)  // Invalid as it expects parameter of type oo.InnerClass
 
 
-  // Both below mehod calls are valid because it expects a parameter of type Outer#InnerClass, which means InnerClass object of any Outer object
+  // Both below method calls are valid because it expects a parameter of type Outer#InnerClass, which means InnerClass object of any Outer object
   o.printUniversal(new o.InnerClass)
   oo.printUniversal(new o.InnerClass)
-//
-//
-//  /*
-//      Exercise
-//      DB keyed by Int or String, but maybe others
-//     */
-//
-//  /*
-//    use path-dependent types
-//    abstract type members and/or type aliases
-//   */
-//  trait ItemLike {
-//    type Key
-//  }
-//  trait Item[K] extends ItemLike {
-//    override type Key = K
-//  }
-//  trait IntItem extends Item[Int]
-//  trait StringItem extends Item[String]
-//
-//  def get[ItemType <: ItemLike](key: ItemLike#Key): ItemType = ???
-//
-//  get[IntItem](3)
-//  get[StringItem]("apple")
-//  // get[IntItem]("orange")  // InCorrect because IntType has Key type as Int
-//
+
+
+  /*
+    Example 1 - Types Key-Value Data Store
+      Assume we have a key-value data store. All keys are String, but the ValueType of each Key may differ from others.
+      We can encode the ValueType of each key-value in the Key type. When setting the key-value, we can encode the value
+      with the proper encoder of the key.ValueType. Thus making key.ValueType a path-dependent type.
+   */
+
+  // First, let’s create an abstract class that contains the name of the key and the value type:
+  abstract class Key(val name: String) {
+    type ValueType
+  }
+
+  // Whenever we have an instance of Key, we can access the value type of that key by referencing the ValueType member.
+  // Now let’s introduce two general operations of common key-value stores, set and get, in the Operations trait:
+  trait Encoder[T] {
+    def encode(t: T): Array[Byte]
+  }
+
+  trait Decoder[T] {
+    def decode(d: Array[Byte]): T
+  }
+
+  trait Operations {
+    def set(key: Key)(value: key.ValueType)(implicit enc: Encoder[key.ValueType]): Unit
+    def get(key: Key)(implicit decoder: Decoder[key.ValueType]): Option[key.ValueType]
+  }
+
+  case class Database() extends Operations {
+    private val db = mutable.Map.empty[String, Array[Byte]]
+    override def get(key: Key)(implicit decoder: Decoder[key.ValueType]): Option[key.ValueType] = {
+      db.get(key.name).map(v => decoder.decode(v))
+    }
+
+    override def set(key: Key)(value: key.ValueType)(implicit enc: Encoder[key.ValueType]): Unit = {
+      db.update(key.name, enc.encode(value))
+    }
+  }
+
+  object Database {
+    def key[Data](v: String) = new Key(v) {
+      override type ValueType = Data
+    }
+  }
+
+  object Encoder {
+    implicit val stringEncoder: Encoder[String] = (t: String) => t.getBytes()
+    implicit val doubleEncoder: Encoder[Double] = (t: Double) => {
+      val bytes = new Array[Byte](8)
+      ByteBuffer.wrap(bytes).putDouble(t)
+      bytes
+    }
+  }
+
+  object Decoder {
+    implicit val stringDecoder: Decoder[String] = (bytes: Array[Byte]) => new String(bytes)
+    implicit val doubleDecoder: Decoder[Double] = (bytes: Array[Byte]) => ByteBuffer.wrap(bytes).getDouble
+  }
+
+  val db = Database()
+  import Encoder.doubleEncoder
+  val key = Database.key[Double]("key1")
+  db.set(key)(20.0)
+  println(db.get(key))
+
+
+  /*
+    Example 2 - Parental Award and Punishment Discipline
+      Assume we want to model parental disciplines of punishment and reward. All parents can reward any child,
+      but they can’t punish the children of others
+   */
+  case class Parent(name: String) {
+    class Child
+    def child = new this.Child
+    def punish(c: this.Child): Unit = println(s"$name is punishing $c")
+    def reward(c: Parent#Child): Unit = println(s"$name is rewarding $c")
+  }
+
+  val p1 = Parent("John")
+  val p2 = Parent("Marry")
+  p1.punish(p1.child)
+  // p1.punish(p2.child)  // Won't compile as it expects p1.child
+  p2.reward(p1.child)  // Will compile
+  p2.reward(p2.child)
 
 }
